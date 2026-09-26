@@ -1,6 +1,26 @@
 name: security-ci
 on: [push, pull_request]
 jobs:
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot full Compose stack
+        run: |
+          cat > .env <<'ENV'
+          POSTGRES_PASSWORD=ci-postgres
+          APAS_API_PASSWORD=ci-api
+          APAS_AUTH_PASSWORD=ci-auth
+          APAS_INGESTION_PASSWORD=ci-ingest
+          APAS_AUDIT_PASSWORD=ci-audit
+          APAS_RUNTIME_MODE=demo
+          ENV
+          docker compose up -d --build
+          for i in {1..30}; do curl -fsS http://localhost:8000/health && exit 0; sleep 2; done
+          docker compose logs
+          exit 1
+      - if: always()
+        run: docker compose down -v
   security:
     runs-on: ubuntu-latest
     services:
