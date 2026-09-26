@@ -4,6 +4,10 @@ Start here when changing or reviewing APAS Defensible GraphRAG security.
 
 ## Documents
 
+### [Security Constitution](../../SECURITY_CONSTITUTION.md)
+
+**Canonical security policy. Read this first.** Defines numbered `SEC-*` rules that humans and coding agents must preserve. Covers identity, JWT/OIDC, OAuth/token replay, PostgreSQL RLS, multi-tenancy, classifications, capabilities, vector/embedding security, graph/RDF security, prompt injection, excessive agency, LLM output handling, provenance, audit, secrets, ingestion, SSRF/egress, supply chain, CI/CD, rate limiting, human review, demo-vs-production boundaries, and mandatory adversarial tests.
+
 ### [Security Prompt](../../SECURITY_PROMPT.md)
 
 Operational instructions for coding agents and reviewers. Defines the project's non-negotiable rules, trust boundaries, database/retrieval/model constraints, and required security tests.
@@ -62,6 +66,10 @@ Any change touching one of these areas should be treated as security-sensitive:
 - claim verification
 - conflict resolution
 - human review
+- secrets and cryptographic keys
+- SSRF/network egress
+- dependency/model supply chain
+- rate limits/resource budgets
 - public error behavior and metadata leakage
 
-Use the change-review checklist before merging.
+Use the Security Constitution and change-review checklist before merging.
