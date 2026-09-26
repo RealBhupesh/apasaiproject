@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -19,6 +19,12 @@ class Evidence:
     page: int
     jurisdiction: str
     score: float
+    tenant_id: UUID | None = None
+    classification: str | None = None
+    valid_from: date | None = None
+    valid_to: date | None = None
+    transaction_from: datetime | None = None
+    transaction_to: datetime | None = None
 
 
 @dataclass
@@ -34,3 +40,4 @@ class EvidenceSet:
     conflicts: list[dict[str, Any]] = field(default_factory=list)
     security_decisions: list[AccessDecision] = field(default_factory=list)
     evidence_set_id: UUID = field(default_factory=uuid4)
+    known_at: datetime | None = None

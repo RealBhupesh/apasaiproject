@@ -15,7 +15,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ DECLARE r text; BEGIN
-  FOREACH r IN ARRAY ARRAY['apas_api_reader','apas_api_writer','apas_graph_reader','apas_ingestion_worker','apas_audit_writer','apas_security_admin'] LOOP
+  FOREACH r IN ARRAY ARRAY['apas_api_reader','apas_api_writer','apas_graph_reader','apas_ingestion_worker','apas_audit_writer','apas_security_admin','apas_migration_admin'] LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname=r) THEN EXECUTE format('CREATE ROLE %I NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS',r); END IF;
   END LOOP;
 END $$;

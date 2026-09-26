@@ -23,5 +23,20 @@ class ProvenanceService:
         )
         if decision.decision != Decision.ALLOW:
             raise PermissionError("provenance denied")
-        # Return only previously authorized lineage; no global IDs or counts.
-        return {k: v for k, v in record.items() if k not in {"tenant_id", "classification"}}
+        resource_ids=[]
+        if record.get("chunk_id"): resource_ids.append(UUID(record["chunk_id"]))
+        resource_ids.extend(UUID(str(x)) for x in record.get("lineage_chunk_ids",[]))
+        for chunk_id in resource_ids:
+            chunk=self.store.chunks.get(chunk_id)
+            if not chunk:
+                raise PermissionError("provenance denied")
+            hop=self.policy.authorize(context,ProtectedResource("chunk",str(chunk.id),chunk.tenant_id,chunk.classification,chunk.jurisdiction),Operation.PROVENANCE)
+            if hop.decision!=Decision.ALLOW:
+                raise PermissionError("provenance denied")
+            version=self.store.versions.get(chunk.document_version_id); document=self.store.documents.get(version.source_document_id) if version else None
+            if not document:
+                raise PermissionError("provenance denied")
+            doc_hop=self.policy.authorize(context,ProtectedResource("document",str(document.id),document.tenant_id,document.classification,document.jurisdiction),Operation.PROVENANCE)
+            if doc_hop.decision!=Decision.ALLOW:
+                raise PermissionError("provenance denied")
+        return {k: v for k, v in record.items() if k not in {"tenant_id", "classification", "lineage_chunk_ids"}}

@@ -40,6 +40,7 @@ class SecurityContext:
     agent_id: str | None = None
     tool_id: str | None = None
     request_id: UUID | None = None
+    identity_issuer: str | None = None
 
 
 @dataclass(frozen=True)

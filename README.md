@@ -178,7 +178,7 @@ Golden metrics include answer correctness, grounded-claim rate, abstention accur
 
 ### Verified in this build
 
-- `46 passed` automated tests in this environment; 4 live PostgreSQL tests are CI-gated.
+- `68 passed` automated tests in this environment; 10 live PostgreSQL tests are skipped when `TEST_DATABASE_URL` is absent.
 - Golden evaluation: 6/6 scenarios passed.
 - Cross-tenant leakage, unauthorized retrieval, unsupported released claims, prompt-injection success, and undetected audit tampering: zero in the deterministic suite.
 - PostgreSQL migration/RLS is supplied and contract-tested. It was **not executed in this build environment because Docker/PostgreSQL was unavailable**; run the Compose command and `scripts/verify_rls.sql` before presenting the database enforcement as deployment-verified.
@@ -240,8 +240,95 @@ V4 implements the complete advanced roadmap on top of the V3 security core:
 
 ### V4 verification status
 
-- Local environment: **46 passed, 4 skipped**. The skipped tests require `TEST_DATABASE_URL` and are designed to run in the PostgreSQL CI job.
+- Local environment: **68 passed, 10 skipped**. The skipped tests require live PostgreSQL credentials.
 - Golden suite: **6/6 passed**.
 - Critical lint: passed.
-- Live PostgreSQL tests cannot run in this sandbox because Docker/PostgreSQL is unavailable; the supplied GitHub Actions workflow template is the execution path for those four tests.
+- Live PostgreSQL tests cannot run in this sandbox because Docker/PostgreSQL is unavailable. The real workflow is `.github/workflows/security-ci.yml`; it runs all nine live tests.
 - One non-security warning remains from Starlette’s transitional TestClient/httpx compatibility layer.
+
+## Runtime enforcement status (V4.1)
+
+### Implemented and runtime-enforced in production mode
+
+When `APAS_RUNTIME_MODE=production`, `/ask` rejects JSON demo identities and requires a Bearer JWT. Startup fails if either database URL, OIDC configuration, or signing key is absent. The executable path is:
+
+```text
+Bearer JWT validation (issuer, audience, signature, expiry)
+→ DatabaseMembershipAuthority(issuer, subject, selected tenant)
+→ SecurityContext from database authorization attributes
+→ one PostgreSQL transaction
+→ transaction-local app.* context
+→ RLS-secured hybrid pgvector retrieval and fixed graph template
+→ bitemporal and precedence processing
+→ tool-free untrusted-evidence composer
+→ fail-closed deterministic checks, then semantic verification
+→ persisted claims and transitive provenance
+→ signed and persisted EvidencePackage
+→ audit.append_event()
+→ commit
+```
+
+PostgreSQL runtime LOGIN roles are provisioned separately from NOLOGIN group roles. The API runtime is non-owner, non-superuser, cannot bypass RLS, create databases/roles, administer policies, or mutate audit history. Capability use is bound twice: signed request claims are checked in Python, and the persisted capability row atomically validates scope and spends its call budget in PostgreSQL.
+
+### Implemented but adapter-dependent
+
+- Production OIDC uses a configured PEM verification key. Deployments needing rotating JWKS must add a cached JWKS provider without changing database membership resolution.
+- `KMSDelegatingKey` defines the production signing boundary. AWS KMS, GCP Cloud KMS, Azure Key Vault, and Vault Transit require provider-specific `sign` and `verify` callables and deployment IAM. Local Ed25519 is development-only.
+- The semantic verifier remains explicitly named `conservative-lexical-nli-v2`. It can reject but cannot override any deterministic failure. A separately authorized production NLI adapter may replace only that final stage.
+- The RDFLib adapter is embedded. Production graph retrieval in `/ask` currently uses the PostgreSQL `knowledge.relations` projection behind a fixed query template and RLS.
+
+### Demo-only
+
+- `MemoryStore`, selectable identities, in-process graph data, in-memory capabilities, and `AuditLedger` are used only when `APAS_RUNTIME_MODE=demo`.
+- The UI displays **DEMO SECURITY MODE** and hides the demo identity selector when production mode is reported.
+
+## Security guarantees actually verified
+
+### Verified locally in this execution environment
+
+- 68 non-PostgreSQL tests pass.
+- Golden evaluation passes 6/6.
+- Capability tokens bind subject, tenant, audience, tool, operation, jurisdiction, purpose, classification, expiry, delegation depth, revocation, and budget.
+- OIDC tests prove JWT tenant, role, and clearance claims do not determine authorization.
+- Issuer collisions, multiple memberships, inactive identities, wrong audience, unknown issuer, and expired tokens fail closed.
+- RDF named graphs prevent same-tenant unauthorized-jurisdiction observation.
+- Hidden and nonexistent provenance produce the same public response.
+- Higher-classification lineage is transitively denied without exposing its resource ID.
+- Novel retrieved instructions have no tool-capability channel.
+- Evidence-package and audit-chain tampering are detected in deterministic tests.
+
+### Defined in real PostgreSQL CI and pending execution outside this sandbox
+
+`.github/workflows/security-ci.yml` starts pgvector PostgreSQL, applies migrations 001–003 in order, seeds synthetic rows, creates a non-owner runtime login, and runs the full suite. The ten live tests prove:
+
+- Cross-tenant chunks, embeddings, graph edges, claims, and packages are invisible.
+- PUBLIC context cannot count restricted rows.
+- A closer Beta vector cannot enter Alpha ranking.
+- `SET LOCAL` context disappears before a pooled connection is reused.
+- Runtime role flags and database/schema/table ownership are non-privileged.
+- Runtime SQL cannot assume the security-admin role, alter policies, disable RLS, drop tables, or read security tables.
+- Runtime SQL cannot update or delete audit history.
+- Two concurrent spends against `max_calls=1` produce exactly one success.
+- The production runtime executes OIDC → database identity → SET LOCAL → RLS retrieval → persisted signed package.
+- Tampering with persisted package JSON makes signature verification fail.
+
+Docker/PostgreSQL is unavailable in the current agent sandbox, so these claims are not reported as locally executed. Check the GitHub `security-ci` result before treating them as deployment-verified.
+
+## Repository security controls recommended
+
+Repository settings are intentionally not changed automatically. Recommended controls:
+
+- Protect `main` and disallow direct pushes.
+- Require the `security-ci` check and at least one pull-request review.
+- Require signed commits and dismiss stale approvals after security changes.
+- Enable secret scanning, push protection, dependency review, and CodeQL.
+- Enable Dependabot or Renovate with grouped security updates.
+- Add `CODEOWNERS` review requirements for `app/db/migrations/`, `app/security/`, `app/auth/`, `.github/workflows/`, and `docker/postgres-init/`.
+
+## Production-only remaining work
+
+- Configure a real OIDC issuer/JWKS lifecycle and rotate keys.
+- Connect `KMSDelegatingKey` to the selected cloud or Vault provider; never mount a long-lived private key in a production container.
+- Move database passwords to Docker/Kubernetes secrets or a workload-identity database authentication mechanism.
+- Run and require `security-ci`, then retain its reports as release evidence.
+- Add production observability with classified-field redaction and a tenant-independent authentication-failure security sink for failures that occur before tenant resolution.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apas-defensible-graphrag"
-version = "4.0.0"
+version = "4.1.0"
 description = "Secure, provenance-first, bitemporal GraphRAG reference architecture"
 requires-python = ">=3.11"
 dependencies = [
@@ -29,3 +29,7 @@ addopts = "-q"
 
 [tool.ruff]
 line-length = 100
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["tests*", "docker*"]

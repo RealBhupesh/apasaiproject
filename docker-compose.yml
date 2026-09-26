@@ -3,22 +3,41 @@ services:
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: apas
-      POSTGRES_USER: apas_migration_admin
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      APAS_API_PASSWORD: ${APAS_API_PASSWORD:?set APAS_API_PASSWORD}
+      APAS_AUTH_PASSWORD: ${APAS_AUTH_PASSWORD:?set APAS_AUTH_PASSWORD}
+      APAS_INGESTION_PASSWORD: ${APAS_INGESTION_PASSWORD:?set APAS_INGESTION_PASSWORD}
+      APAS_AUDIT_PASSWORD: ${APAS_AUDIT_PASSWORD:?set APAS_AUDIT_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U apas_migration_admin -d apas"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d apas"]
       interval: 3s
       timeout: 3s
-      retries: 20
+      retries: 30
     ports: ["5432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./app/db/migrations/001_v3.sql:/docker-entrypoint-initdb.d/001_v3.sql:ro
+      - ./app/db/migrations/001_v3.sql:/docker-entrypoint-initdb.d/10-001-v3.sql:ro
+      - ./app/db/migrations/002_v4_hardening.sql:/docker-entrypoint-initdb.d/20-002-v4.sql:ro
+      - ./app/db/migrations/003_runtime_enforcement.sql:/docker-entrypoint-initdb.d/30-003-runtime.sql:ro
+      - ./scripts/seed_postgres.sql:/docker-entrypoint-initdb.d/40-seed.sql:ro
+      - ./docker/postgres-init/90-runtime-roles.sh:/docker-entrypoint-initdb.d/90-runtime-roles.sh:ro
   api:
     build: .
     environment:
-      DATABASE_URL: postgresql+psycopg://apas_api_reader:${APP_DB_PASSWORD:-local-reader}@postgres:5432/apas
+      APAS_RUNTIME_MODE: ${APAS_RUNTIME_MODE:-demo}
+      DATABASE_URL: postgresql+psycopg://apas_api_runtime:${APAS_API_PASSWORD}@postgres:5432/apas
+      AUTH_DATABASE_URL: postgresql+psycopg://apas_auth_runtime:${APAS_AUTH_PASSWORD}@postgres:5432/apas
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-}
+      OIDC_PUBLIC_KEY: ${OIDC_PUBLIC_KEY:-}
+      EVIDENCE_SIGNING_PRIVATE_KEY: ${EVIDENCE_SIGNING_PRIVATE_KEY:-}
     depends_on:
       postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 30
     ports: ["8000:8000"]
 volumes: {pgdata: {}}
