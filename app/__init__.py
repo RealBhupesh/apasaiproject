@@ -1,1 +1,1 @@
-"""APAS Defensible GraphRAG V3."""
+"""APAS Defensible GraphRAG V4."""

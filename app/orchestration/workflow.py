@@ -8,13 +8,17 @@ from uuid import UUID
 from app.audit.ledger import AuditLedger
 from app.db.repositories.memory import MemoryStore
 from app.graph.repository import SecureGraphRepository
+from app.human_review.service import ReviewCase, ReviewService
 from app.llm.boundary import EvidenceOnlyComposer
 from app.orchestration.models import Answer, Disposition
+from app.precedence.engine import AuthorityLevel, Norm, PrecedenceEngine, Resolution
 from app.retrieval.secure import secure_retrieve
 from app.security.capabilities import Capability, require_capability
-from app.security.context import Operation, SecurityContext
+from app.security.context import Classification, Operation, SecurityContext
 from app.security.policies import PolicyEngine
-from app.verification.claims import ClaimVerifier, VerificationStatus
+from app.signing.evidence_package import EvidencePackageService
+from app.verification.claims import VerificationStatus
+from app.verification.pipeline import VerificationPipeline
 
 NORMATIVE = re.compile(r"\b(?:must|shall|required|within|deadline)\b", re.I)
 
@@ -27,11 +31,15 @@ class DefensibleGraphRAG:
         "provenance", "audit",
     )
 
-    def __init__(self, store: MemoryStore, policy: PolicyEngine, graph: SecureGraphRepository, ledger: AuditLedger, capability: Capability | None = None):
+    def __init__(self, store: MemoryStore, policy: PolicyEngine, graph: SecureGraphRepository, ledger: AuditLedger,
+                 capability: Capability | None = None, package_service: EvidencePackageService | None = None,
+                 review_service: ReviewService | None = None):
         self.store, self.policy, self.graph, self.ledger = store, policy, graph, ledger
-        self.capability = capability
+        self.capability, self.package_service = capability, package_service
+        self.review_service = review_service or ReviewService()
         self.composer = EvidenceOnlyComposer()
-        self.verifier = ClaimVerifier()
+        self.verifier = VerificationPipeline()
+        self.precedence = PrecedenceEngine()
 
     def _trace(self, request_id: UUID, node: str, outcome: str = "ok") -> None:
         self.store.traces.setdefault(request_id, []).append({
@@ -58,13 +66,22 @@ class DefensibleGraphRAG:
         self._trace(request_id, "build_evidence_set")
         self._trace(request_id, "temporal_resolution")
 
-        # Conflict if authorized, applicable normative evidence disagrees on a number.
-        numbers = {}
+        # Deterministic precedence may resolve a conflict only from explicit rules.
+        norms = []
         for e in es.document_passages:
             if NORMATIVE.search(e.text):
-                for n in re.findall(r"\b\d+(?:\.\d+)?\b", e.text): numbers.setdefault(n, []).append(str(e.id))
-        if len(numbers) > 1:
-            es.conflicts.append({"reason": "incompatible normative numeric requirements", "evidence_by_value": numbers})
+                level = AuthorityLevel.FEDERAL if e.jurisdiction == "FEDERAL" else AuthorityLevel.STATE
+                for number in re.findall(r"\b\d+(?:\.\d+)?\b", e.text):
+                    norms.append(Norm(e.id, level, e.jurisdiction, "reporting-deadline", number, as_of))
+        precedence = self.precedence.resolve(norms, as_of)
+        if precedence.resolution == Resolution.RESOLVED and precedence.winner:
+            es.document_passages = [e for e in es.document_passages if e.id == precedence.winner]
+        elif precedence.resolution == Resolution.ESCALATE:
+            es.conflicts.append({
+                "reason": "incompatible requirements with insufficient precedence",
+                "evidence_ids": [str(x) for x in precedence.considered],
+                "precedence_rationale": precedence.rationale,
+            })
         self._trace(request_id, "conflict_detection", "conflict" if es.conflicts else "clean")
 
         claims = [] if es.conflicts else self.composer.compose(question, es)
@@ -96,14 +113,39 @@ class DefensibleGraphRAG:
                     "model_version": self.composer.model_run.model_version,
                     "prompt_version": self.composer.model_run.prompt_version,
                     "policy_versions": sorted({d.policy_version for d in es.security_decisions}),
-                    "verifier": result.verifier, "verification_status": result.status,
+                    "verifier": list(result.verifier_chain), "verification_status": result.status,
                 }
         self._trace(request_id, "provenance")
-        event = self.ledger.append(tenant_id=context.tenant_id, actor=context.actor_id, event_type="ANSWER_COMPLETED", resource=str(request_id), request_id=request_id, metadata={"disposition": disposition})
+        evidence_rows = [asdict(e) for e in es.document_passages]
+        answer_level = max((self.store.chunks[e.chunk_id].classification for e in es.document_passages), default=Classification.PUBLIC)
+        review_case_id = None
+        if disposition == Disposition.ESCALATE:
+            review = self.review_service.request(ReviewCase(
+                context.tenant_id, request_id, "unresolved regulatory conflict", evidence_rows,
+                es.conflicts[0], context.actor_id, int(answer_level),
+            ))
+            review_case_id = review.id
+        event = self.ledger.append(tenant_id=context.tenant_id, actor=context.actor_id, event_type="ANSWER_COMPLETED", resource=str(request_id), request_id=request_id, metadata={"disposition": disposition, "classification": answer_level.name})
+        package_id = None
+        if self.package_service:
+            package = self.package_service.issue(
+                tenant_id=context.tenant_id, request_id=request_id, answer_classification=answer_level.name,
+                jurisdiction=jurisdiction, question=question, answer=text,
+                claims=[asdict(c) for c in supported], evidence=evidence_rows,
+                document_versions=[{"id": str(e.document_version_id)} for e in es.document_passages],
+                policy_versions=[d.policy_version for d in es.security_decisions],
+                model_manifest=asdict(self.composer.model_run),
+                temporal_parameters={"valid_at": as_of.isoformat(), "known_at": (known_at or datetime.now(timezone.utc)).isoformat()},
+                audit_checkpoint=event.event_hash,
+            )
+            self.store.evidence_packages[package.package_id] = package
+            package_id = package.package_id
         self._trace(request_id, "audit")
         return Answer(
-            request_id, disposition, text, confidence, supported, results,
-            [asdict(e) for e in es.document_passages], es.graph_relations,
-            f"valid_at={as_of.isoformat()}; known_at={(known_at or datetime.now(timezone.utc)).isoformat()}",
-            es.conflicts, [asdict(d) for d in es.security_decisions], self.store.traces[request_id], event.id,
+            request_id=request_id, disposition=disposition, answer=text, confidence=confidence,
+            claims=supported, verification=results, evidence=evidence_rows, graph_relations=es.graph_relations,
+            temporal_reasoning=f"valid_at={as_of.isoformat()}; known_at={(known_at or datetime.now(timezone.utc)).isoformat()}",
+            conflicts=es.conflicts, security_decisions=[asdict(d) for d in es.security_decisions],
+            trace=self.store.traces[request_id], audit_event_id=event.id,
+            answer_classification=answer_level.name, evidence_package_id=package_id, review_case_id=review_case_id,
         )

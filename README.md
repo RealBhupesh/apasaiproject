@@ -1,4 +1,4 @@
-# APAS V3 — Defensible GraphRAG
+# APAS V4 — Defensible GraphRAG
 
 A security-first, provenance-first reference implementation of a multi-tenant regulatory knowledge platform. **All bundled regulations are explicitly synthetic demo data and are not EPA, legal, or compliance advice.**
 
@@ -6,7 +6,7 @@ A security-first, provenance-first reference implementation of a multi-tenant re
 
 ## What problem this solves
 
-Conventional RAG optimizes retrieval relevance and treats security, time, lineage, and hallucination control as surrounding concerns. APAS V3 moves those concerns into the retrieval and answer path. A response is released only after tenant isolation, RBAC + ABAC, bitemporal resolution, conflict detection, claim verification, a policy gate, provenance capture, and audit chaining.
+Conventional RAG optimizes retrieval relevance and treats security, time, lineage, and hallucination control as surrounding concerns. APAS V4 moves those concerns into the retrieval and answer path. A response is released only after tenant isolation, RBAC + ABAC, bitemporal resolution, conflict detection, claim verification, a policy gate, provenance capture, and audit chaining.
 
 ## Threat model
 
@@ -178,7 +178,7 @@ Golden metrics include answer correctness, grounded-claim rate, abstention accur
 
 ### Verified in this build
 
-- `23 passed` automated tests.
+- `46 passed` automated tests in this environment; 4 live PostgreSQL tests are CI-gated.
 - Golden evaluation: 6/6 scenarios passed.
 - Cross-tenant leakage, unauthorized retrieval, unsupported released claims, prompt-injection success, and undetected audit tampering: zero in the deterministic suite.
 - PostgreSQL migration/RLS is supplied and contract-tested. It was **not executed in this build environment because Docker/PostgreSQL was unavailable**; run the Compose command and `scripts/verify_rls.sql` before presenting the database enforcement as deployment-verified.
@@ -217,3 +217,31 @@ Golden metrics include answer correctness, grounded-claim rate, abstention accur
 - **How do you control hallucinations?** Structured claims, evidence-ID binding, deterministic checks, per-claim status, fail-closed release, conflict escalation, and abstention.
 - **How do agents stay safe?** Short-lived capability objects restrict tenant, tools, operation, clearance, and expiry; wrappers expose domain operations, not databases.
 - **How would this scale?** Partition large tenant tables, tune HNSW/IVFFlat per workload, cache only authorization-equivalent results, use a production triplestore, and serialize audit chain heads.
+
+## V4 production-hardening layer
+
+V4 implements the complete advanced roadmap on top of the V3 security core:
+
+1. **Live PostgreSQL enforcement:** `ci/security-ci.yml.example` is a ready-to-install GitHub Actions workflow that boots pgvector/PostgreSQL, runs both migrations, seeds real Alpha/Beta records, provisions a non-owner login, and executes direct RLS tests across chunks, vectors, graph data, claims, packages, clearance boundaries, privileges, and pooled transaction context.
+2. **Production identity boundary:** `OIDCAuthenticator` validates signed issuer/audience/expiry claims while `DatabaseMembershipAuthority` obtains tenant, roles, clearance, and jurisdictions exclusively from PostgreSQL. Token-supplied tenant or role claims are ignored.
+3. **Signed evidence packages:** every configured answer produces an Ed25519-signed package binding question, answer, claims, evidence, document versions, policies, model manifest, temporal parameters, classification, jurisdiction, and audit checkpoint. `KMSDelegatingKey` provides the production HSM/KMS boundary.
+4. **Advanced audit:** V4 adds serialized per-tenant chain heads, a `SECURITY DEFINER` append function, Merkle roots, signed checkpoints, and fields for an external immutable anchor.
+5. **Independent verification pipeline:** evidence existence, temporal resolution, numeric/unit support, citation alignment, conflict state, and independent entailment are separate fail-closed stages.
+6. **Regulatory precedence:** explicit supersession, specificity, and authority hierarchy can resolve a conflict; same-level or insufficient precedence escalates.
+7. **RDF adapter:** RDFLib `Dataset` named graphs isolate tenants and classifications, record PROV-O lineage, and expose only allow-listed graph templates—never arbitrary SPARQL.
+8. **Information-flow control:** derived values inherit the maximum input classification and cross-tenant derivation is forbidden.
+9. **Side-channel controls:** denied resource IDs/counts stay internal, public denials are normalized, and a bounded-delay utility is available for high-risk existence endpoints.
+10. **Secure ingestion:** MIME validation, malware scanning interface, hashing, secret detection, prompt-injection detection, classification review, parser/chunker/model version pinning, and quarantine manifests.
+11. **Policy-as-code lifecycle:** versioned bundles support simulation, digesting, four-eyes approval, activation, rollback-ready states, and an OPA Data API adapter.
+12. **Signed agent capability tokens:** tenant, audience, tool, operation, jurisdiction, purpose, classification, expiry, nonce, delegation depth, call budget, and revocation are enforced.
+13. **Human review console:** `/review-console` shows tenant/classification-filtered conflict dossiers and requires two distinct reviewers for high-risk decisions.
+14. **Model reproducibility:** manifests capture provider/model/prompt/tool schema/parameters/evidence order/safety/response hashes and whether deterministic replay is supported.
+15. **Continuous security evaluation:** CI runs migrations, live RLS tests, unit/integration/adversarial tests, the golden suite, and critical lint checks. The authorization matrix tests every demo identity against returned tenant, classification, and jurisdiction labels.
+
+### V4 verification status
+
+- Local environment: **46 passed, 4 skipped**. The skipped tests require `TEST_DATABASE_URL` and are designed to run in the PostgreSQL CI job.
+- Golden suite: **6/6 passed**.
+- Critical lint: passed.
+- Live PostgreSQL tests cannot run in this sandbox because Docker/PostgreSQL is unavailable; the supplied GitHub Actions workflow template is the execution path for those four tests.
+- One non-security warning remains from Starlette’s transitional TestClient/httpx compatibility layer.

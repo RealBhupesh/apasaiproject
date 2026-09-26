@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apas-defensible-graphrag"
-version = "3.0.0"
+version = "4.0.0"
 description = "Secure, provenance-first, bitemporal GraphRAG reference architecture"
 requires-python = ">=3.11"
 dependencies = [
@@ -15,6 +15,8 @@ dependencies = [
   "psycopg[binary]>=3.2,<4",
   "pgvector>=0.3,<1",
   "rdflib>=7,<8",
+  "cryptography>=43,<46",
+  "PyJWT[crypto]>=2.9,<3",
 ]
 
 [project.optional-dependencies]

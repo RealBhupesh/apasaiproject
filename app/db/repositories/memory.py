@@ -59,6 +59,7 @@ class MemoryStore:
     traces: dict[UUID, list[dict[str, Any]]] = field(default_factory=dict)
     claims: dict[UUID, Any] = field(default_factory=dict)
     provenance: dict[UUID, dict[str, Any]] = field(default_factory=dict)
+    evidence_packages: dict[UUID, Any] = field(default_factory=dict)
 
     def save_decision(self, decision: AccessDecision) -> None:
         self.decisions.append(decision)

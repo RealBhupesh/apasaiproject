@@ -159,7 +159,7 @@ CREATE TRIGGER audit_no_update_delete BEFORE UPDATE OR DELETE ON audit.events FO
 
 REVOKE ALL ON SCHEMA security,documents,knowledge,provenance,audit FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA security,documents,knowledge,provenance,audit FROM PUBLIC;
-GRANT USAGE ON SCHEMA documents,knowledge,provenance TO apas_api_reader;
+GRANT USAGE ON SCHEMA security,documents,knowledge,provenance TO apas_api_reader;
 GRANT SELECT ON documents.source_documents,documents.document_versions,documents.chunks,documents.embeddings,knowledge.relations,provenance.claims TO apas_api_reader;
 GRANT apas_api_reader TO apas_graph_reader;
 GRANT SELECT,INSERT,UPDATE ON documents.source_documents,documents.document_versions,documents.chunks,documents.embeddings,knowledge.relations TO apas_ingestion_worker;

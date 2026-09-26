@@ -11,3 +11,14 @@ def test_health_and_ask():
 def test_unknown_identity_is_non_sensitive_denial():
     r=client.post('/ask',json={"question":"Show me records","identity":"attacker","jurisdiction":"FEDERAL","as_of_date":"2026-06-01"})
     assert r.status_code==403 and r.json()["detail"]=="Request denied by policy"
+
+
+def test_signed_evidence_package_round_trip():
+    answer=client.post('/ask',json={"question":"When must Alpha facilities report a sample result?","identity":"alpha-analyst","jurisdiction":"FEDERAL","as_of_date":"2026-06-01"}).json()
+    package=client.get(f"/evidence-packages/{answer['evidence_package_id']}",headers={"x-demo-identity":"alpha-analyst"})
+    assert package.status_code==200 and package.json()["signature_valid"] is True
+
+def test_security_decisions_require_privileged_role():
+    answer=client.post('/ask',json={"question":"When must Alpha facilities report a sample result?","identity":"alpha-analyst","jurisdiction":"FEDERAL","as_of_date":"2026-06-01"}).json()
+    denied=client.get(f"/security/decisions/{answer['request_id']}",headers={"x-demo-identity":"alpha-analyst"})
+    assert denied.status_code==403

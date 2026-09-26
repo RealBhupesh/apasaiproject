@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from app.verification.claims import CandidateClaim, VerificationResult
+from app.verification.claims import CandidateClaim
 
 
 class Disposition(StrEnum):
@@ -21,7 +21,7 @@ class Answer:
     answer: str
     confidence: float
     claims: list[CandidateClaim]
-    verification: list[VerificationResult]
+    verification: list[Any]
     evidence: list[dict[str, Any]]
     graph_relations: list[dict[str, Any]]
     temporal_reasoning: str
@@ -29,3 +29,6 @@ class Answer:
     security_decisions: list[dict[str, Any]]
     trace: list[dict[str, Any]]
     audit_event_id: UUID
+    answer_classification: str = "PUBLIC"
+    evidence_package_id: UUID | None = None
+    review_case_id: UUID | None = None
