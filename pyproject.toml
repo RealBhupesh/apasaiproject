@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "apas-defensible-graphrag"
+version = "3.0.0"
+description = "Secure, provenance-first, bitemporal GraphRAG reference architecture"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
+  "pydantic>=2.8,<3",
+  "sqlalchemy>=2.0,<3",
+  "psycopg[binary]>=3.2,<4",
+  "pgvector>=0.3,<1",
+  "rdflib>=7,<8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "httpx>=0.27,<1", "ruff>=0.6,<1"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
