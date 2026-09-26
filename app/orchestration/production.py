@@ -49,7 +49,7 @@ class ProductionDefensibleGraphRAG:
         for claim,result in zip(claims,results):
             cited=[x for x in evidence.document_passages if x.id in claim.evidence_ids]
             lineage={"evidence":[{"chunk_id":str(x.chunk_id),"document_version_id":str(x.document_version_id),"document_id":str(x.document_id),"page":x.page,"section":x.section} for x in cited],"model":asdict(self.composer.model_run),"policy_versions":["postgres-rls-v1"],"verifier":list(result.verifier_chain)}
-            self.provenance.save_claim(claim_id=claim.id,context=context,text=claim.text,status=str(result.status),classification=level.name,jurisdiction=jurisdiction,lineage=lineage)
+            self.provenance.save_claim(claim_id=claim.id,context=context,claim_text=claim.text,status=str(result.status),classification=level.name,jurisdiction=jurisdiction,lineage=lineage)
         checkpoint=self.audit.append(context,"EVIDENCE_PACKAGE_SIGNING_STARTED",str(context.request_id),{"classification":level.name})["event_hash"]
         evidence_rows=[asdict(x) for x in evidence.document_passages]
         package=self.signer.issue(tenant_id=context.tenant_id,request_id=context.request_id,answer_classification=level.name,jurisdiction=jurisdiction,question=question,answer=text,claims=[asdict(x) for x in supported],evidence=evidence_rows,document_versions=[{"id":str(x.document_version_id)} for x in evidence.document_passages],policy_versions=["postgres-rls-v1"],model_manifest=asdict(self.composer.model_run),temporal_parameters={"valid_at":as_of.isoformat(),"known_at":known_at.isoformat()},audit_checkpoint=checkpoint)

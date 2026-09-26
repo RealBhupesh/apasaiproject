@@ -57,8 +57,8 @@ class PostgresAuditRepository:
 
 class PostgresProvenanceRepository:
     def __init__(self,connection:Connection):self.connection=connection
-    def save_claim(self,*,claim_id:UUID,context:SecurityContext,text:str,status:str,classification:str,jurisdiction:str,lineage:dict[str,Any])->None:
-        self.connection.execute(text("""INSERT INTO provenance.claims(id,tenant_id,request_id,text,status,classification,jurisdiction,lineage,created_by) VALUES(:id,:tenant,:request,:text,:status,CAST(:classification AS security.classification),:jurisdiction,CAST(:lineage AS jsonb),:actor)"""),{"id":claim_id,"tenant":context.tenant_id,"request":context.request_id,"text":text,"status":status,"classification":classification,"jurisdiction":jurisdiction,"lineage":json.dumps(lineage),"actor":context.actor_id})
+    def save_claim(self,*,claim_id:UUID,context:SecurityContext,claim_text:str,status:str,classification:str,jurisdiction:str,lineage:dict[str,Any])->None:
+        self.connection.execute(text("""INSERT INTO provenance.claims(id,tenant_id,request_id,text,status,classification,jurisdiction,lineage,created_by) VALUES(:id,:tenant,:request,:text,:status,CAST(:classification AS security.classification),:jurisdiction,CAST(:lineage AS jsonb),:actor)"""),{"id":claim_id,"tenant":context.tenant_id,"request":context.request_id,"text":claim_text,"status":status,"classification":classification,"jurisdiction":jurisdiction,"lineage":json.dumps(lineage),"actor":context.actor_id})
     def load_claim_transitively(self,claim_id:UUID)->dict[str,Any]:
         claim=self.connection.execute(text("SELECT id,text,status,lineage FROM provenance.claims WHERE id=:id"),{"id":claim_id}).mappings().one_or_none()
         if not claim: raise KeyError("not found")
