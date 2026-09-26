@@ -297,9 +297,9 @@ PostgreSQL runtime LOGIN roles are provisioned separately from NOLOGIN group rol
 - Novel retrieved instructions have no tool-capability channel.
 - Evidence-package and audit-chain tampering are detected in deterministic tests.
 
-### Defined in real PostgreSQL CI and pending execution outside this sandbox
+### Verified in real PostgreSQL CI
 
-`.github/workflows/security-ci.yml` starts pgvector PostgreSQL, applies migrations 001–003 in order, seeds synthetic rows, creates a non-owner runtime login, and runs the full suite. The ten live tests prove:
+GitHub Actions run `36257915580` completed successfully with **78 tests passed**, including all ten live PostgreSQL tests. `.github/workflows/security-ci.yml` starts pgvector PostgreSQL, applies migrations 001–003 in order, seeds synthetic rows, creates non-owner runtime logins, and proves:
 
 - Cross-tenant chunks, embeddings, graph edges, claims, and packages are invisible.
 - PUBLIC context cannot count restricted rows.
@@ -312,7 +312,7 @@ PostgreSQL runtime LOGIN roles are provisioned separately from NOLOGIN group rol
 - The production runtime executes OIDC → database identity → SET LOCAL → RLS retrieval → persisted signed package.
 - Tampering with persisted package JSON makes signature verification fail.
 
-Docker/PostgreSQL is unavailable in the current agent sandbox, so these claims are not reported as locally executed. Check the GitHub `security-ci` result before treating them as deployment-verified.
+Docker/PostgreSQL remains unavailable in the agent sandbox, but the same commit passed the required live PostgreSQL suite in GitHub `security-ci`.
 
 ## Repository security controls recommended
 
